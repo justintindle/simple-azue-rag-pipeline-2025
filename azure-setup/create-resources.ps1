@@ -9,8 +9,6 @@ if ($proceed -ne "Y") {
     exit 0
 }
 
-
-
 # Variables
 $tenantId = $env:AZURE_TENANT_ID
 if (-not $tenantId) {
@@ -159,4 +157,3 @@ az search indexer run `
   --resource-group $resourceGroup
 
 Write-Host "✅ Indexer manually triggered"
-
