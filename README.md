@@ -7,9 +7,9 @@ This project walks through how to build a simple Retrieval-Augmented Generation 
 - Azure OpenAI (GPT-4)
 - .NET 6 Console App or API
 
-## 🧠 Architecture Overview
+### Architecture Overview
 
-![Architecture Diagram](Simple Rag Pipeline Digram.png)
+![Simple RAG Pipeline Diagram](./Simple%20Rag%20Pipeline%20Diagram.png)
 
 ---
 

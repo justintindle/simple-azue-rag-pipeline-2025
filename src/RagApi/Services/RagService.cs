@@ -3,16 +3,10 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-public class RagService
+public class RagService(IOptions<AppSettings> settings, HttpClient httpClient)
 {
-    private readonly AppSettings _settings;
-    private readonly HttpClient _httpClient;
-
-    public RagService(IOptions<AppSettings> settings)
-    {
-        _settings = settings.Value;
-        _httpClient = new HttpClient();
-    }
+    private readonly AppSettings _settings = settings.Value;
+    private readonly HttpClient _httpClient = httpClient;
 
     public async Task<string> GetRagResponseAsync(string question)
     {

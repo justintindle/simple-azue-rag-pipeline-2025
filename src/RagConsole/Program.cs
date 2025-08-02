@@ -34,7 +34,7 @@ using var searchDoc = JsonDocument.Parse(searchJson);
 var hits = searchDoc.RootElement.GetProperty("value");
 var context = string.Join("\n", hits.EnumerateArray().Select(h => h.GetProperty("content").GetString()));
 
-Console.WriteLine("\n📄 Retrieved Context:\n");
+Console.WriteLine("\n Retrieved Context:\n");
 Console.WriteLine(context);
 
 // Step 2: Call Azure OpenAI
@@ -63,5 +63,5 @@ var answer = openAiDoc.RootElement
     .GetProperty("content")
     .GetString();
 
-Console.WriteLine("\n🤖 GPT-4 Answer:\n");
+Console.WriteLine("\n GPT-4 Answer:\n");
 Console.WriteLine(answer);
