@@ -5,7 +5,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Inject config + services
-builder.Services.AddSingleton<RagService>();
+builder.Services.AddScoped<IRagService, RagService>();
 builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AppSettings"));
 
 var app = builder.Build();
