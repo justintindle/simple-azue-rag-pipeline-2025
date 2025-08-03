@@ -11,18 +11,22 @@ if ($proceed -ne "Y") {
 
 # Variables
 $tenantId = $env:AZURE_TENANT_ID
+
 if (-not $tenantId) {
     $tenantId = Read-Host "Enter your Azure tenant ID"
 }
+
 $subscriptionId = $env:AZURE_SUBSCRIPTION_ID
+
 if (-not $subscriptionId) {
     $subscriptionId = Read-Host "Enter your Azure subscription ID"
 }
+
 $resourceGroup = "rag-workshop-rg"
 $location = "eastus"
 $storageAccount = "ragstorageacct$((Get-Random -Minimum 1000 -Maximum 9999))"
 $containerName = "documents"
-$localFolder = "../sample-data"  # Adjust if needed
+$localFolder = "$PSScriptRoot/../sample-data"
 
 # Login to Azure
 az login --tenant $tenantId
@@ -105,7 +109,7 @@ if (Test-Path "./search-index.json") {
 # 8. Create Azure Search data source
 $dataSourceName = "rag-blob-datasource"
 
-az search data-source create `
+az search datasource create `
   --name $dataSourceName `
   --service-name $searchServiceName `
   --resource-group $resourceGroup `
@@ -117,15 +121,43 @@ Write-Host "✅ Data source created: $dataSourceName in search service: $searchS
 
 # 9. Create Azure Search indexer
 
-$indexerName = "rag-indexer"
+# Get the search service admin key
+$searchKey = (az search admin-key show `
+    --service-name $searchServiceName `
+    --resource-group $resourceGroup `
+    --query primaryKey `
+    --output tsv).Trim()
 
-az search indexer create `
-  --name $indexerName `
-  --service-name $searchServiceName `
-  --resource-group $resourceGroup `
-  --data-source-name $dataSourceName `
-  --target-index-name rag-index `
-  --schedule-interval PT5M
+if ([string]::IsNullOrWhiteSpace($searchKey)) {
+    Write-Host "❌ ERROR: Failed to retrieve Azure Search admin key. Cannot proceed with indexer creation."
+    exit 1
+}
+
+# Create Azure Search indexer using REST API
+$indexerName = "rag-indexer"
+$indexerBody = @{
+    name = $indexerName
+    dataSourceName = $dataSourceName
+    targetIndexName = "rag-index"
+    schedule = @{
+        interval = "PT5M"
+    }
+    parameters = @{
+        configuration = @{
+            parsingMode = "default"
+            indexStorageMetadataOnlyForOversizedDocuments = $false
+        }
+    }
+} | ConvertTo-Json -Depth 10
+
+$headers = @{
+    'api-key' = $searchKey
+    'Content-Type' = 'application/json'
+}
+
+$indexerUrl = "https://$searchServiceName.search.windows.net/indexers/$indexerName`?api-version=2023-07-01-Preview"
+
+Invoke-RestMethod -Uri $indexerUrl -Headers $headers -Method Put -Body $indexerBody
 
 Write-Host "✅ Indexer created: $indexerName (runs every 5 minutes)"
 
@@ -151,9 +183,7 @@ Write-Host "OpenAI Resource: ragopenai"
 
 # Manually trigger the indexer to start indexing immediately
 Write-Host "`n🔄 Triggering indexer to run immediately..."
-az search indexer run `
-  --name $indexerName `
-  --service-name $searchServiceName `
-  --resource-group $resourceGroup
+$runIndexerUrl = "https://$searchServiceName.search.windows.net/indexers/$indexerName/run?api-version=2023-07-01-Preview"
+Invoke-RestMethod -Uri $runIndexerUrl -Headers $headers -Method Post
 
 Write-Host "✅ Indexer manually triggered"
