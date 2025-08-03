@@ -41,10 +41,10 @@ namespace RagApi.Services;
             var requestBody = new
             {
                 messages = new[]
-                {
-                new { role = "system", content = "You are a helpful assistant." },
-                new { role = "user", content = $"Use the following context to answer the question:\n\n{context}\n\nQuestion: {question}" }
-            },
+                    {
+                        new { role = "system", content = "You are a helpful assistant." },
+                        new { role = "user", content = $"Use the following context to answer the question:\n\n{context}\n\nQuestion: {question}" }
+                    },
                 temperature = 0.5
             };
 
