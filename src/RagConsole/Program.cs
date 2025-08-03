@@ -2,17 +2,40 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
+// Load environment variables from .env file if it exists
+var envFilePath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+if (File.Exists(envFilePath))
+{
+    var lines = File.ReadAllLines(envFilePath);
+    foreach (var line in lines)
+    {
+        if (!string.IsNullOrWhiteSpace(line) && !line.StartsWith("#") && line.Contains('='))
+        {
+            var parts = line.Split('=', 2);
+            if (parts.Length == 2)
+            {
+                Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
+            }
+        }
+    }
+}
+
 var config = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json")
+    .AddEnvironmentVariables()
     .Build();
 
-var searchEndpoint = config["SearchServiceEndpoint"];
-var searchApiKey = config["SearchApiKey"];
-var indexName = config["SearchIndexName"];
+// Get values from environment variables first, fallback to config
+var searchServiceName = Environment.GetEnvironmentVariable("AZURE_SEARCH_SERVICE_NAME") ?? config["AzureSearchServiceName"];
+var searchEndpoint = $"https://{searchServiceName}.search.windows.net";
+var searchApiKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY") ?? config["AzureSearchApiKey"];
+var indexName = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX_NAME") ?? config["AzureSearchIndexName"];
+var searchApiVersion = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_VERSION") ?? config["AzureSearchApiVersion"];
 
-var openAiEndpoint = config["OpenAIEndpoint"];
-var openAiKey = config["OpenAIApiKey"];
-var openAiModel = config["OpenAIModel"];
+var openAiEndpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? config["AzureOpenAIEndpoint"];
+var openAiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY") ?? config["AzureOpenAIApiKey"];
+var openAiModel = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? config["AzureOpenAIDeployment"];
+var openAiApiVersion = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_VERSION") ?? config["AzureOpenAIApiVersion"];
 
 Console.WriteLine("🔎 Enter a question:");
 var question = Console.ReadLine();
@@ -20,7 +43,7 @@ var question = Console.ReadLine();
 var httpClient = new HttpClient();
 
 // Step 1: Retrieve documents from Azure Search
-var searchUrl = $"{searchEndpoint}/indexes/{indexName}/docs/search?api-version=2023-07-01-preview";
+var searchUrl = $"{searchEndpoint}/indexes/{indexName}/docs/search?api-version={searchApiVersion}";
 var searchBody = JsonSerializer.Serialize(new { search = question, top = 3 });
 
 var searchRequest = new HttpRequestMessage(HttpMethod.Post, searchUrl);
@@ -38,7 +61,7 @@ Console.WriteLine("\n Retrieved Context:\n");
 Console.WriteLine(context);
 
 // Step 2: Call Azure OpenAI
-var chatUrl = $"{openAiEndpoint}/openai/deployments/{openAiModel}/chat/completions?api-version=2024-05-01";
+var chatUrl = $"{openAiEndpoint}/openai/deployments/{openAiModel}/chat/completions?api-version={openAiApiVersion}";
 
 var chatRequest = new
 {

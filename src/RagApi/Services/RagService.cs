@@ -18,7 +18,7 @@ namespace RagApi.Services;
 
         private async Task<string> SearchCognitiveIndex(string query)
         {
-            var searchUrl = $"{_settings.SearchServiceEndpoint}/indexes/{_settings.SearchIndexName}/docs/search?api-version=2023-07-01-preview";
+            var searchUrl = $"{_settings.SearchServiceEndpoint}/indexes/{_settings.SearchIndexName}/docs/search?api-version={_settings.AzureSearchApiVersion}";
             var body = JsonSerializer.Serialize(new { search = query, top = 3 });
 
             using var request = new HttpRequestMessage(HttpMethod.Post, searchUrl);
@@ -37,7 +37,7 @@ namespace RagApi.Services;
 
         private async Task<string> QueryOpenAI(string question, string context)
         {
-            var endpoint = $"{_settings.OpenAIEndpoint}/openai/deployments/{_settings.OpenAIModel}/chat/completions?api-version=2024-05-01";
+            var endpoint = $"{_settings.OpenAIEndpoint}/openai/deployments/{_settings.OpenAIModel}/chat/completions?api-version={_settings.AzureOpenAIApiVersion}";
             var requestBody = new
             {
                 messages = new[]
@@ -62,6 +62,6 @@ namespace RagApi.Services;
                       .GetProperty("choices")[0]
                       .GetProperty("message")
                       .GetProperty("content")
-                      .GetString();
+                      .GetString() ?? "No response generated";
         }
     }
