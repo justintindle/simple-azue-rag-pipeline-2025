@@ -1,18 +1,28 @@
-var builder = WebApplication.CreateBuilder(args);
+using RagApi.Services;
 
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+namespace RagApi;
+internal class Program
+{
+    private static void Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(args);
 
-// Inject config + services
-builder.Services.AddScoped<IRagService, RagService>();
-builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AppSettings"));
+        builder.Services.AddControllers();
+        builder.Services.AddEndpointsApiExplorer();
+        builder.Services.AddSwaggerGen();
 
-var app = builder.Build();
+        // Inject config + services
+        builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AppSettings"));
+        builder.Services.AddHttpClient<IRagService, RagService>();
 
-app.UseSwagger();
-app.UseSwaggerUI();
 
-app.MapControllers();
+        var app = builder.Build();
 
-app.Run();
+        app.UseSwagger();
+        app.UseSwaggerUI();
+
+        app.MapControllers();
+
+        app.Run();
+    }
+}

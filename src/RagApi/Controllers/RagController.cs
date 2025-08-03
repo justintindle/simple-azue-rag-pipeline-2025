@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
+using RagApi.Services;
+
+namespace RagApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class RagController(RagService ragService) : ControllerBase
+public class RagController(IRagService ragService) : ControllerBase
 {
-    private readonly RagService _ragService = ragService;
+    private readonly IRagService _ragService = ragService;
 
     [HttpGet("ask")]
     public async Task<IActionResult> Ask([FromQuery] string question)
