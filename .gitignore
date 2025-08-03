@@ -3,3 +3,6 @@ obj/
 *.user
 *.suo
 .env
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
