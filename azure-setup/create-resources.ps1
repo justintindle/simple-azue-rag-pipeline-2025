@@ -1,189 +1,244 @@
-if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
-    Write-Host "❌ Azure CLI is not installed. Please install it before running this script."
-    exit 1
+# Helper functions
+function Test-AzCli {
+    if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+        Write-Host "❌ Azure CLI is not installed. Please install it before running this script."
+        return $false
+    }
+    return $true
 }
 
-$proceed = Read-Host "This will create resources in Azure. Continue? (Y/N)"
-if ($proceed -ne "Y") {
-    Write-Host "❌ Cancelled by user."
-    exit 0
+function Invoke-AzCommand {
+    param([string]$Command, [string]$ErrorMessage)
+    try {
+        $result = Invoke-Expression "az $Command"
+        if ($LASTEXITCODE -ne 0) { throw "Az command failed" }
+        return $result
+    }
+    catch {
+        Write-Host "❌ $ErrorMessage"
+        Write-Host "Command: az $Command"
+        Write-Host "Error: $_"
+        return $null
+    }
 }
+
+function Test-OpenAIExists {
+    param($name, $resourceGroup)
+    $result = Invoke-AzCommand "cognitiveservices account show --name $name --resource-group $resourceGroup 2>$null" "Failed to check OpenAI existence"
+    return $null -ne $result
+}
+
+function Get-SoftDeletedOpenAI {
+    param($name, $resourceGroup)
+    $result = Invoke-AzCommand "cognitiveservices account list-deleted --resource-group $resourceGroup" "Failed to list deleted OpenAI resources"
+    if ($result) {
+        return ($result | ConvertFrom-Json) | Where-Object { $_.name -eq $name }
+    }
+    return $null
+}
+
+function Restore-OpenAI {
+    param(
+        [string]$name,
+        [string]$resourceGroup,
+        [string]$location
+    )
+    try {
+        $result = az cognitiveservices account recover `
+            --name $name `
+            --resource-group $resourceGroup `
+            --location $location `
+            --yes
+        return $true
+    }
+    catch {
+        Write-Host "❌ Failed to restore Azure OpenAI resource: $name"
+        return $false
+    }
+}
+
+function New-AzureResource {
+    param(
+        [string]$ResourceType,
+        [string]$Name,
+        [hashtable]$Params
+    )
+    $paramsString = $Params.GetEnumerator() | ForEach-Object { "--$($_.Key) `"$($_.Value)`"" }
+    $command = "$ResourceType create --name $Name $paramsString"
+    return Invoke-AzCommand $command "Failed to create $ResourceType resource: $Name"
+}
+
+# Validate prerequisites
+if (-not (Test-AzCli)) { exit 1 }
 
 # Variables
-$tenantId = $env:AZURE_TENANT_ID
+$localFolder = "$PSScriptRoot/../sample-data"
+$config = @{
+    resourceGroup = "rag-workshop-rg"
+    location = "eastus"
+    storageAccount = "ragstorageacct$((Get-Random -Minimum 1000 -Maximum 9999))"
+    containerName = "documents"
+    searchServiceName = "ragsearch$((Get-Random -Minimum 1000 -Maximum 9999))"
+    openAIName = "ragopenai"
+    dataSourceName = "rag-blob-datasource"
+    indexName = "rag-index"
+    indexerName = "rag-indexer"
+}
 
+$tenantId = $env:AZURE_TENANT_ID
 if (-not $tenantId) {
     $tenantId = Read-Host "Enter your Azure tenant ID"
 }
 
 $subscriptionId = $env:AZURE_SUBSCRIPTION_ID
-
 if (-not $subscriptionId) {
     $subscriptionId = Read-Host "Enter your Azure subscription ID"
 }
 
-$resourceGroup = "rag-workshop-rg"
-$location = "eastus"
-$storageAccount = "ragstorageacct$((Get-Random -Minimum 1000 -Maximum 9999))"
-$containerName = "documents"
-$localFolder = "$PSScriptRoot/../sample-data"
-
-# Login to Azure
+# Login and set subscription
 az login --tenant $tenantId
-
-# Set subscription
 az account set --subscription $subscriptionId
 
-# 1. Create resource group
-az group create --name $resourceGroup --location $location
+# Create resource group
+New-AzureResource "group" $config.resourceGroup @{ location = $config.location }
 
-# 2. Create storage account
-az storage account create `
-  --name $storageAccount `
-  --resource-group $resourceGroup `
-  --sku Standard_LRS `
-  --location $location
+# Create storage account
+New-AzureResource "storage account" $config.storageAccount @{
+    "resource-group" = $config.resourceGroup
+    sku = "Standard_LRS"
+    location = $config.location
+}
 
-# 3. Get storage account key
+# Get storage account key
 $storageKey = (az storage account keys list `
-  --resource-group $resourceGroup `
-  --account-name $storageAccount `
+  --resource-group $config.resourceGroup `
+  --account-name $config.storageAccount `
   --query "[0].value" `
   --output tsv).Trim()
 
-# 4. Create blob container
+# Create blob container
 az storage container create `
-  --name $containerName `
-  --account-name $storageAccount `
+  --name $config.containerName `
+  --account-name $config.storageAccount `
   --account-key $storageKey `
   --public-access off
 
-# 5. Upload local documents to blob container
+# Upload local documents
 Get-ChildItem -Path $localFolder -Filter *.pdf | ForEach-Object {
     az storage blob upload `
-      --account-name $storageAccount `
+      --account-name $config.storageAccount `
       --account-key $storageKey `
-      --container-name $containerName `
+      --container-name $config.containerName `
       --name $_.Name `
       --file $_.FullName `
       --overwrite
 }
 
-Write-Host "✅ Upload complete. Blob container: $containerName in storage account: $storageAccount"
+Write-Host "✅ Upload complete. Blob container: $($config.containerName) in storage account: $($config.storageAccount)"
 
-# 6. Create Azure Search Service resource
-$searchServiceName = "ragsearch$((Get-Random -Minimum 1000 -Maximum 9999))"
-
+# Create Azure Search service
 az search service create `
-  --name $searchServiceName `
-  --resource-group $resourceGroup `
+  --name $config.searchServiceName `
+  --resource-group $config.resourceGroup `
   --sku basic `
-  --location $location
+  --location $config.location
 
-Write-Host "✅ Search service created: $searchServiceName in resource group: $resourceGroup"
+Write-Host "✅ Search service created: $($config.searchServiceName) in resource group: $($config.resourceGroup)"
 
-# 7. Create Azure Search index
-# Ensure you have a search-index.json file in the current directory with the correct index definition.
-# See Azure Search index documentation: https://learn.microsoft.com/en-us/azure/search/search-howto-create-index-powershell
-# Example search-index.json:
-# {
-#   "name": "rag-index",
-#   "fields": [
-#     { "name": "id", "type": "Edm.String", "key": true, "searchable": false },
-#     { "name": "content", "type": "Edm.String", "searchable": true, "retrievable": true, "analyzer": "en.lucene" }
-#   ]
-# }
-
-if (Test-Path "./search-index.json") {
+# Create search index
+if (Test-Path -Path "./search-index.json") {
     az search index create `
-      --name rag-index `
-      --service-name $searchServiceName `
-      --resource-group $resourceGroup `
-      --body ./search-index.json
+        --name $config.indexName `
+        --service-name $config.searchServiceName `
+        --resource-group $config.resourceGroup `
+        --body ./search-index.json
 
-    Write-Host "✅ Search index created: rag-index in search service: $searchServiceName"
+    Write-Host "✅ Search index created: $($config.indexName)"
 } else {
-    Write-Host "❌ ERROR: search-index.json file not found in current directory. Please provide the file before running this step."
-}
-
-# 8. Create Azure Search data source
-$dataSourceName = "rag-blob-datasource"
-
-az search datasource create `
-  --name $dataSourceName `
-  --service-name $searchServiceName `
-  --resource-group $resourceGroup `
-  --type azureblob `
-  --connection-string "DefaultEndpointsProtocol=https;AccountName=$storageAccount;AccountKey=$storageKey;EndpointSuffix=core.windows.net" `
-  --container name=$containerName
-
-Write-Host "✅ Data source created: $dataSourceName in search service: $searchServiceName"
-
-# 9. Create Azure Search indexer
-
-# Get the search service admin key
-$searchKey = (az search admin-key show `
-    --service-name $searchServiceName `
-    --resource-group $resourceGroup `
-    --query primaryKey `
-    --output tsv).Trim()
-
-if ([string]::IsNullOrWhiteSpace($searchKey)) {
-    Write-Host "❌ ERROR: Failed to retrieve Azure Search admin key. Cannot proceed with indexer creation."
+    Write-Host "❌ ERROR: search-index.json file not found in current directory."
     exit 1
 }
 
-# Create Azure Search indexer using REST API
-$indexerName = "rag-indexer"
-$indexerBody = @{
-    name = $indexerName
-    dataSourceName = $dataSourceName
-    targetIndexName = "rag-index"
-    schedule = @{
-        interval = "PT5M"
-    }
-    parameters = @{
-        configuration = @{
-            parsingMode = "default"
-            indexStorageMetadataOnlyForOversizedDocuments = $false
-        }
-    }
-} | ConvertTo-Json -Depth 10
+# Create data source
+az search datasource create `
+  --name $config.dataSourceName `
+  --service-name $config.searchServiceName `
+  --resource-group $config.resourceGroup `
+  --type azureblob `
+  --connection-string "DefaultEndpointsProtocol=https;AccountName=$($config.storageAccount);AccountKey=$storageKey;EndpointSuffix=core.windows.net" `
+  --container name=$($config.containerName)
 
-$headers = @{
-    'api-key' = $searchKey
-    'Content-Type' = 'application/json'
+Write-Host "✅ Data source created: $($config.dataSourceName)"
+
+# Get admin key
+$searchKey = (az search admin-key show `
+    --service-name $config.searchServiceName `
+    --resource-group $config.resourceGroup `
+    --query primaryKey `
+    --output tsv).Trim()
+
+# Retry loop to wait for data source
+$maxRetries = 5
+$retryCount = 0
+$success = $false
+while (-not $success -and $retryCount -lt $maxRetries) {
+    Start-Sleep -Seconds 5
+    try {
+        $url = "https://$($config.searchServiceName).search.windows.net/datasources/$($config.dataSourceName)?api-version=2023-07-01-Preview"
+        $headers = @{ 'api-key' = $searchKey; 'Content-Type' = 'application/json' }
+        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
+        $success = $true
+    } catch {
+        $retryCount++
+        Write-Host "Waiting for data source... ($retryCount/$maxRetries)"
+    }
 }
 
-$indexerUrl = "https://$searchServiceName.search.windows.net/indexers/$indexerName`?api-version=2023-07-01-Preview"
+if (-not $success) {
+    Write-Host "❌ ERROR: Data source not ready after $maxRetries attempts."
+    exit 1
+}
 
+# Create indexer
+$indexerBody = @{
+    name = $config.indexerName
+    dataSourceName = $config.dataSourceName
+    targetIndexName = $config.indexName
+    schedule = @{ interval = "PT5M" }
+    parameters = @{ configuration = @{ parsingMode = "default"; indexStorageMetadataOnlyForOversizedDocuments = $false } }
+} | ConvertTo-Json -Depth 10
+
+$indexerUrl = "https://$($config.searchServiceName).search.windows.net/indexers/$($config.indexerName)?api-version=2023-07-01-Preview"
 Invoke-RestMethod -Uri $indexerUrl -Headers $headers -Method Put -Body $indexerBody
 
-Write-Host "✅ Indexer created: $indexerName (runs every 5 minutes)"
+Write-Host "✅ Indexer created: $($config.indexerName)"
 
-# 10. Create Azure OpenAI resource
-az cognitiveservices account create `
-  --name ragopenai `
-  --resource-group $resourceGroup `
-  --kind OpenAI `
-  --sku S0 `
-  --location $location `
-  --yes
+# Create or restore Azure OpenAI
+Write-Host "Checking Azure OpenAI resource..."
+if (Test-OpenAIExists -name $config.openAIName -resourceGroup $config.resourceGroup) {
+    Write-Host "✅ Azure OpenAI resource exists: $($config.openAIName)"
+} else {
+    $softDeleted = Get-SoftDeletedOpenAI -name $config.openAIName -resourceGroup $config.resourceGroup
+    if ($softDeleted) {
+        Write-Host "🔄 Restoring soft-deleted Azure OpenAI..."
+        if (-not (Restore-OpenAI -name $config.openAIName -resourceGroup $config.resourceGroup -location $config.location)) {
+            Write-Host "❌ Restore failed. Creating new..."
+        }
+    }
+    az cognitiveservices account create `
+        --name $config.openAIName `
+        --resource-group $config.resourceGroup `
+        --kind OpenAI `
+        --sku S0 `
+        --location $config.location `
+        --yes
+}
 
-Write-Host "✅ Azure OpenAI resource created: ragopenai in resource group: $resourceGroup"
+# Final output
+Write-Host "`n🎉 All resources created:"
+$config.GetEnumerator() | ForEach-Object { Write-Host "$($_.Key): $($_.Value)" }
 
-Write-Host "`n🎉 All resources created successfully!"
-Write-Host "Storage Account: $storageAccount"
-Write-Host "Blob Container: $containerName"
-Write-Host "Search Service: $searchServiceName"
-Write-Host "Search Index: rag-index"
-Write-Host "Data Source: $dataSourceName"
-Write-Host "Indexer: $indexerName"
-Write-Host "OpenAI Resource: ragopenai"
-
-# Manually trigger the indexer to start indexing immediately
-Write-Host "`n🔄 Triggering indexer to run immediately..."
-$runIndexerUrl = "https://$searchServiceName.search.windows.net/indexers/$indexerName/run?api-version=2023-07-01-Preview"
+# Trigger indexer
+$runIndexerUrl = "https://$($config.searchServiceName).search.windows.net/indexers/$($config.indexerName)/run?api-version=2023-07-01-Preview"
 Invoke-RestMethod -Uri $runIndexerUrl -Headers $headers -Method Post
-
 Write-Host "✅ Indexer manually triggered"
