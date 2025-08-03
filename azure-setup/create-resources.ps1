@@ -24,8 +24,12 @@ function Invoke-AzCommand {
 
 function Test-OpenAIExists {
     param($name, $resourceGroup)
-    $result = Invoke-AzCommand "cognitiveservices account show --name $name --resource-group $resourceGroup 2>$null" "Failed to check OpenAI existence"
-    return $null -ne $result
+    try {
+        $result = az cognitiveservices account show --name $name --resource-group $resourceGroup | ConvertFrom-Json
+        return $true
+    } catch {
+        return $false
+    }
 }
 
 function Get-SoftDeletedOpenAI {
@@ -145,37 +149,54 @@ az search service create `
 
 Write-Host "✅ Search service created: $($config.searchServiceName) in resource group: $($config.resourceGroup)"
 
-# Create search index
-if (Test-Path -Path "./search-index.json") {
-    az search index create `
-        --name $config.indexName `
-        --service-name $config.searchServiceName `
-        --resource-group $config.resourceGroup `
-        --body ./search-index.json
-
-    Write-Host "✅ Search index created: $($config.indexName)"
-} else {
-    Write-Host "❌ ERROR: search-index.json file not found in current directory."
-    exit 1
-}
-
-# Create data source
-az search datasource create `
-  --name $config.dataSourceName `
-  --service-name $config.searchServiceName `
-  --resource-group $config.resourceGroup `
-  --type azureblob `
-  --connection-string "DefaultEndpointsProtocol=https;AccountName=$($config.storageAccount);AccountKey=$storageKey;EndpointSuffix=core.windows.net" `
-  --container name=$($config.containerName)
-
-Write-Host "✅ Data source created: $($config.dataSourceName)"
-
 # Get admin key
 $searchKey = (az search admin-key show `
     --service-name $config.searchServiceName `
     --resource-group $config.resourceGroup `
     --query primaryKey `
     --output tsv).Trim()
+
+$headers = @{
+    'api-key' = $searchKey
+    'Content-Type' = 'application/json'
+}
+
+# Create data source
+# Build the data source creation request body
+$dataSourceBody = @{
+    name = $($config.dataSourceName)
+    description = "Data source for RAG workshop"
+    type = "azureblob"
+    credentials = @{
+        connectionString = "DefaultEndpointsProtocol=https;AccountName=$($config.storageAccount);AccountKey=$storageKey;EndpointSuffix=core.windows.net"
+    }
+    container = @{
+        name = $config.containerName
+    }
+    dataChangeDetectionPolicy = @{
+    "@odata.type" = "#Microsoft.Azure.Search.HighWaterMarkChangeDetectionPolicy"
+    highWaterMarkColumnName = "metadata_storage_last_modified"
+}
+
+} | ConvertTo-Json -Depth 10 -Compress
+
+# Prepare REST API URL and headers
+$dataSourceUrl = "https://$($config.searchServiceName).search.windows.net/datasources/$($config.dataSourceName)?api-version=2023-07-01-Preview"
+
+$headers = @{
+    "Content-Type" = "application/json"
+    "api-key" = $searchKey
+}
+
+# Send the request to create the data source
+try {
+    $response = Invoke-RestMethod -Uri $dataSourceUrl -Headers $headers -Method Put -Body $dataSourceBody
+    Write-Host "✅ Data source created via REST API: $dataSourceName"
+} catch {
+    Write-Host "❌ Failed to create data source via REST API"
+    Write-Host $_
+    exit 1
+}
 
 # Retry loop to wait for data source
 $maxRetries = 5
@@ -198,6 +219,19 @@ if (-not $success) {
     Write-Host "❌ ERROR: Data source not ready after $maxRetries attempts."
     exit 1
 }
+
+# Create index if it doesn't exist
+$indexBody = @{
+    name = $config.indexName
+    fields = @(
+        @{ name = "id"; type = "Edm.String"; key = $true; searchable = $false },
+        @{ name = "content"; type = "Edm.String"; searchable = $true; retrievable = $true; analyzer = "en.lucene" }
+    )
+} | ConvertTo-Json -Depth 10
+
+$indexUrl = "https://$($config.searchServiceName).search.windows.net/indexes/$($config.indexName)?api-version=2023-07-01-Preview"
+$response = Invoke-RestMethod -Uri $indexUrl -Headers $headers -Method Put -Body $indexBody
+Write-Host "✅ Index created: $($config.indexName)"
 
 # Create indexer
 $indexerBody = @{
