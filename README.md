@@ -3,7 +3,7 @@
 This project walks through how to build a simple Retrieval-Augmented Generation (RAG) pipeline using:
 
 - Azure Blob Storage
-- Azure AI Search (Cognitive Search)
+- Azure AI Search (aka Cognitive Search)
 - Azure OpenAI (GPT-4)
 - .NET 6 Console App or API
 
@@ -34,13 +34,13 @@ This project walks through how to build a simple Retrieval-Augmented Generation 
 - **Azure Subscription** with sufficient permissions to create resources
 - **Azure CLI** - Download from [Azure CLI](https://docs.microsoft.com/cli/azure/install-azure-cli)
 - **Azure OpenAI Service Access** - Request access at [Azure OpenAI](https://aka.ms/oai/access)
-- **Azure Cognitive Search** service availability in your region
+- **Azure AI Search** service availability in your region
 - **Azure Blob Storage** service availability in your region
 
 ### 🔑 Required Azure Services & Permissions
 Your Azure subscription must have access to:
 - **Azure OpenAI Service** (with GPT-4 or GPT-4o deployment)
-- **Azure Cognitive Search** (Basic tier or higher recommended)
+- **Azure AI Search** (Basic tier or higher recommended)
 - **Azure Blob Storage** (Standard LRS or higher)
 - **Resource Groups** (Contributor access to create and manage resources)
 
@@ -111,7 +111,7 @@ AZURE_SUBSCRIPTION_ID=your-subscription-id
 
 ```bash
 ### Step 1: Provision Azure Resources
-```bash
+
 # Navigate to the Azure setup directory
 cd azure-setup
 
@@ -163,12 +163,7 @@ dotnet run
 # Navigate to http://localhost:5000/swagger in your browser
 # Use the interactive interface to test the /api/rag endpoint
 
-# Option 2: Use cURL
-curl -X POST "http://localhost:5000/api/rag" 
-     -H "Content-Type: application/json" 
-     -d '{"question": "What is the remote work policy?"}'
-
-# Option 3: Run the Console App
+# Option 2: Run the Console App
 cd ../RagConsole
 dotnet run
 # Follow the interactive prompts to ask questions

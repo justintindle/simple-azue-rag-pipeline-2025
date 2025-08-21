@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 
 // Load environment variables from .env file if it exists
 var envFilePath = Path.Combine(Directory.GetCurrentDirectory(), ".env");

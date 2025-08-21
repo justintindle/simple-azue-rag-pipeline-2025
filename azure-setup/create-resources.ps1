@@ -1,3 +1,5 @@
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
 # Helper functions
 function Test-AzCli {
   if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
