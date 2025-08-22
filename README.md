@@ -291,3 +291,13 @@ Before running the RagAPI, verify:
 - [ ] ✅ Search index created and configured
 - [ ] ✅ Azure OpenAI deployment active and accessible
 - [ ] ✅ Port 5000 available (or alternative port configured)
+
+## 🧠 What could you add next?
+
+- Conversation Memory and Chat History
+- Document Source Citations
+- Hybride Search (Vector + Keyword)
+- Streaming Responses
+- Feedback & Analytics
+- Multi-Modal Support (Image Analysis, Image Generation, Voice)
+- Configuration
