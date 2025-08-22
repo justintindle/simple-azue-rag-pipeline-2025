@@ -5,7 +5,7 @@ This project walks through how to build a simple Retrieval-Augmented Generation 
 - Azure Blob Storage
 - Azure AI Search (aka Cognitive Search)
 - Azure OpenAI (GPT-4)
-- .NET 6 Console App or API
+- .NET 9 Console App or API
 
 ### Architecture Overview
 
@@ -18,7 +18,7 @@ This project walks through how to build a simple Retrieval-Augmented Generation 
 - Upload documents to Azure Blob
 - Index them using Azure Cognitive Search
 - Retrieve relevant chunks via .NET
-- Pass them to Azure OpenAI for a GPT-4 generated response
+- Pass them to Azure OpenAI for a GPT-4o generated response
 
 ---
 

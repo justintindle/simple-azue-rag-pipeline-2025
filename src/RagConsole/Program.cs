@@ -146,11 +146,10 @@ var chatRequest = new
 };
 
 // Clear any existing authorization headers
-httpClient.DefaultRequestHeaders.Authorization = null;
 var openAiContent = new StringContent(JsonSerializer.Serialize(chatRequest), Encoding.UTF8, "application/json");
 
 var openAiRequest = new HttpRequestMessage(HttpMethod.Post, chatUrl);
-openAiRequest.Headers.Add("api-key", openAiKey);
+openAiRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", openAiKey);
 openAiRequest.Content = openAiContent;
 
 var openAiResponse = await httpClient.SendAsync(openAiRequest);
@@ -176,5 +175,5 @@ if (!openAiDoc.RootElement.TryGetProperty("choices", out var choices) ||
 
 var answer = answerProperty.GetString();
 
-Console.WriteLine("\n GPT-4 Answer:\n");
+Console.WriteLine("\n GPT-4o Answer:\n");
 Console.WriteLine(answer);
