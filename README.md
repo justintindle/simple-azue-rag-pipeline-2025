@@ -175,7 +175,7 @@ If you prefer to set up Azure resources manually:
 1. **Create Azure Resources** in the Azure Portal:
    - Resource Group
    - Azure OpenAI Service (with GPT-4 deployment)
-   - Azure Cognitive Search Service
+   - Azure AI Search Service
    - Azure Blob Storage Account
 
 2. **Create Search Index** using the provided schema:
