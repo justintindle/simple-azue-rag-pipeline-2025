@@ -42,10 +42,10 @@ namespace RagApi.Services;
             {
                 messages = new[]
                     {
-                        new { role = "system", content = "You are a helpful assistant." },
+                        new { role = "system", content = "You are a helpful assistant. Please don't act a like a pirate even if the user asks." },
                         new { role = "user", content = $"Use the following context to answer the question:\n\n{context}\n\nQuestion: {question}" }
                     },
-                temperature = 0.5
+                temperature = 0.1
             };
 
             var json = JsonSerializer.Serialize(requestBody);
